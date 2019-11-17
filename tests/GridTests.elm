@@ -28,7 +28,7 @@ allNeighbourPoints =
     ]
 
 
-twoOrThreeNeighbourPointsFuzzer =
+neighbourPointsRangeFuzzer min max =
     Fuzz.map2
         (\neighbourCount seedInt ->
             let
@@ -43,8 +43,16 @@ twoOrThreeNeighbourPointsFuzzer =
             in
             shuffledList |> List.take neighbourCount
         )
-        (Fuzz.intRange 2 3)
+        (Fuzz.intRange min max)
         Fuzz.int
+
+
+twoOrThreeNeighbourPointsFuzzer =
+    neighbourPointsRangeFuzzer 2 3
+
+
+moreThanThreeNeighbourPointsFuzzer =
+    neighbourPointsRangeFuzzer 4 8
 
 
 gridTest : Test
@@ -85,7 +93,7 @@ gridTest =
 rules : Test
 rules =
     describe "Game of Life rules"
-        [ fuzz (list neighbourPointFuzzer) "A live cell dies if has less than two live neighbours" <|
+        [ fuzz (list neighbourPointFuzzer) "A live cell dies if has less than two neighbours" <|
             \neighbourPoints ->
                 let
                     grid =
@@ -108,4 +116,15 @@ rules =
                     |> Grid.tick
                     |> Grid.isCellAlive ( 0, 0 )
                     |> Expect.true "Expected cell (0, 0) to be alive"
+        , fuzz moreThanThreeNeighbourPointsFuzzer "A live cell dies if it has more than three neighbours" <|
+            \neighbourPoints ->
+                let
+                    grid =
+                        Grid.init |> Grid.addLiveCell ( 0, 0 )
+                in
+                neighbourPoints
+                    |> List.foldl Grid.addLiveCell grid
+                    |> Grid.tick
+                    |> Grid.isCellDead ( 0, 0 )
+                    |> Expect.true "Expected cell (0, 0) to be dead"
         ]
