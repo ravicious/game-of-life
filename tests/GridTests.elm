@@ -3,27 +3,54 @@ module GridTests exposing (..)
 import Expect exposing (Expectation)
 import Fuzz exposing (Fuzzer, int, list, string)
 import Grid
+import Random
+import Random.List
 import Test exposing (..)
 
 
 arbitraryPointFuzzer =
-    Fuzz.map2 Tuple.pair int int
+    Fuzz.tuple ( int, int )
 
 
 neighbourPointFuzzer =
-    Fuzz.map2 Tuple.pair (Fuzz.intRange -1 -1) (Fuzz.intRange -1 -1)
+    Fuzz.tuple ( Fuzz.intRange -1 -1, Fuzz.intRange -1 -1 )
+
+
+allNeighbourPoints =
+    [ ( -1, 1 )
+    , ( 0, 1 )
+    , ( 1, 1 )
+    , ( -1, 0 )
+    , ( 1, 0 )
+    , ( -1, -1 )
+    , ( 0, -1 )
+    , ( 1, -1 )
+    ]
+
+
+twoOrThreeNeighbourPointsFuzzer =
+    Fuzz.map2
+        (\neighbourCount seedInt ->
+            let
+                seed =
+                    Random.initialSeed seedInt
+
+                generator =
+                    Random.List.shuffle allNeighbourPoints
+
+                ( shuffledList, _ ) =
+                    Random.step generator seed
+            in
+            shuffledList |> List.take neighbourCount
+        )
+        (Fuzz.intRange 2 3)
+        Fuzz.int
 
 
 gridTest : Test
 gridTest =
     describe "Grid"
-        [ fuzz arbitraryPointFuzzer "adds a live cell and verifies that it's alive" <|
-            \point ->
-                Grid.init
-                    |> Grid.addLiveCell point
-                    |> Grid.isCellAlive point
-                    |> Expect.true "Expected cell to be alive"
-        , fuzz (list arbitraryPointFuzzer) "adds multiple live cells and verifies that they're all alive" <|
+        [ fuzz (list arbitraryPointFuzzer) "adds multiple live cells and verifies that they're all alive" <|
             \points ->
                 let
                     expected =
@@ -34,6 +61,22 @@ gridTest =
 
                     actual =
                         List.map (\point -> Tuple.pair (Grid.isCellAlive point grid) point) points
+                in
+                Expect.equal expected actual
+        , fuzz (list arbitraryPointFuzzer) "adds multiple live cells, kills them and verifies that they're all dead" <|
+            \points ->
+                let
+                    expected =
+                        List.map (Tuple.pair True) points
+
+                    gridWithAliveCells =
+                        List.foldl Grid.addLiveCell Grid.init points
+
+                    gridWithDeadCells =
+                        List.foldl Grid.killCell gridWithAliveCells points
+
+                    actual =
+                        List.map (\point -> Tuple.pair (Grid.isCellDead point gridWithDeadCells) point) points
                 in
                 Expect.equal expected actual
         ]
@@ -54,4 +97,15 @@ rules =
                     |> Grid.tick
                     |> Grid.isCellDead ( 0, 0 )
                     |> Expect.true "Expected cell (0, 0) to be dead"
+        , fuzz twoOrThreeNeighbourPointsFuzzer "A live cell survives if it has two or three neighbours" <|
+            \neighbourPoints ->
+                let
+                    grid =
+                        Grid.init |> Grid.addLiveCell ( 0, 0 )
+                in
+                neighbourPoints
+                    |> List.foldl Grid.addLiveCell grid
+                    |> Grid.tick
+                    |> Grid.isCellAlive ( 0, 0 )
+                    |> Expect.true "Expected cell (0, 0) to be alive"
         ]
