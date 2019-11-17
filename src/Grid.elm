@@ -54,26 +54,53 @@ isCellDead point grid =
 tick : Grid -> Grid
 tick grid =
     let
+        liveCells =
+            getLiveCells grid
+
         neighbourCountsForLiveCells =
-            countNeighboursForLiveCells grid
+            countNeighboursForCells grid liveCells
+
+        deadNeighboursOfLiveCells =
+            getDeadNeighboursOfAliveCells liveCells
+
+        neighbourCountsForDeadCells =
+            countNeighboursForCells grid deadNeighboursOfLiveCells
+
+        processAliveCells grid_ =
+            List.foldl
+                (\( point, neighbourCount ) gridAcc ->
+                    if neighbourCount == 2 || neighbourCount == 3 then
+                        -- Keep cell alive
+                        gridAcc
+
+                    else
+                        killCell point gridAcc
+                )
+                grid_
+                neighbourCountsForLiveCells
+
+        processDeadCells grid_ =
+            List.foldl
+                (\( point, neighbourCount ) gridAcc ->
+                    if neighbourCount == 3 then
+                        -- Make cell alive.
+                        addLiveCell point gridAcc
+
+                    else
+                        -- Keep it dead.
+                        gridAcc
+                )
+                grid_
+                neighbourCountsForDeadCells
     in
-    List.foldl
-        (\( point, neighbourCount ) gridAcc ->
-            if neighbourCount == 2 || neighbourCount == 3 then
-                -- Keep cell alive
-                gridAcc
-
-            else
-                killCell point gridAcc
-        )
-        grid
-        neighbourCountsForLiveCells
+    grid
+        |> processAliveCells
+        |> processDeadCells
 
 
-countNeighboursForLiveCells : Grid -> List ( Point, Int )
-countNeighboursForLiveCells grid =
-    liveCells grid
-        |> List.map (\point -> ( point, countNeighboursForCell point grid ))
+countNeighboursForCells : Grid -> List Point -> List ( Point, Int )
+countNeighboursForCells grid points =
+    List.map (\point -> ( point, countNeighboursForCell point grid )) points
 
 
 neighbourPointDeltas =
@@ -106,11 +133,41 @@ countNeighboursForCell ( x, y ) grid =
         neighbourPointDeltas
 
 
-liveCells : Grid -> List Point
-liveCells grid =
+getLiveCells : Grid -> List Point
+getLiveCells grid =
     IntDict.toList grid
         |> List.foldl
             (\( x, ys ) acc ->
                 Set.foldl (\y acc_ -> ( x, y ) :: acc_) acc ys
             )
             []
+
+
+getDeadNeighboursOfAliveCells : List Point -> List Point
+getDeadNeighboursOfAliveCells alivePoints =
+    let
+        alivePointsSet =
+            Set.fromList alivePoints
+    in
+    Set.toList <|
+        -- Fold over alive points and check neighbours for each alive point.
+        List.foldl
+            (\( x, y ) deadPoints ->
+                -- Fold over neighbour, checking if a neighbour is alive or dead.
+                List.foldl
+                    (\( dx, dy ) deadPoints_ ->
+                        let
+                            neighbourPoint =
+                                ( x + dx, y + dy )
+                        in
+                        if Set.member neighbourPoint alivePointsSet then
+                            deadPoints_
+
+                        else
+                            Set.insert neighbourPoint deadPoints_
+                    )
+                    deadPoints
+                    neighbourPointDeltas
+            )
+            Set.empty
+            alivePoints

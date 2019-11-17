@@ -55,6 +55,10 @@ moreThanThreeNeighbourPointsFuzzer =
     neighbourPointsRangeFuzzer 4 8
 
 
+threeNeighbourPointsFuzzer =
+    neighbourPointsRangeFuzzer 3 3
+
+
 gridTest : Test
 gridTest =
     describe "Grid"
@@ -127,4 +131,15 @@ rules =
                     |> Grid.tick
                     |> Grid.isCellDead ( 0, 0 )
                     |> Expect.true "Expected cell (0, 0) to be dead"
+        , fuzz threeNeighbourPointsFuzzer "A dead cell becomes alive if it has exactly three neighbours" <|
+            \neighbourPoints ->
+                let
+                    grid =
+                        Grid.init
+                in
+                neighbourPoints
+                    |> List.foldl Grid.addLiveCell grid
+                    |> Grid.tick
+                    |> Grid.isCellAlive ( 0, 0 )
+                    |> Expect.true "Expected cell (0, 0) to become alive"
         ]
