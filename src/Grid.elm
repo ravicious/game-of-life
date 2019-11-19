@@ -1,49 +1,40 @@
 module Grid exposing (Grid, addLiveCell, init, isCellAlive, isCellDead, killCell, tick)
 
-import IntDict exposing (IntDict)
 import Set exposing (Set)
 
 
 {-| IntDict keys are x coordinates, set values are y coordinates.
 -}
 type alias Grid =
-    IntDict (Set Int)
+    Set Point
 
 
 type alias Point =
     ( Int, Int )
 
 
+type alias Points =
+    Set Point
+
+
 init : Grid
 init =
-    IntDict.empty
+    Set.empty
 
 
 addLiveCell : Point -> Grid -> Grid
-addLiveCell ( x, y ) grid =
-    let
-        update =
-            Maybe.map (Set.insert y)
-                >> Maybe.withDefault (Set.singleton y)
-                >> Just
-    in
-    IntDict.update x update grid
+addLiveCell =
+    Set.insert
 
 
 killCell : Point -> Grid -> Grid
-killCell ( x, y ) grid =
-    let
-        update =
-            Maybe.map (Set.remove y)
-    in
-    IntDict.update x update grid
+killCell =
+    Set.remove
 
 
 isCellAlive : Point -> Grid -> Bool
-isCellAlive ( x, y ) grid =
-    IntDict.get x grid
-        |> Maybe.map (Set.member y)
-        |> Maybe.withDefault False
+isCellAlive =
+    Set.member
 
 
 isCellDead : Point -> Grid -> Bool
@@ -55,7 +46,7 @@ tick : Grid -> Grid
 tick grid =
     let
         liveCells =
-            getLiveCells grid
+            grid
 
         neighbourCountsForLiveCells =
             countNeighboursForCells grid liveCells
@@ -67,7 +58,7 @@ tick grid =
             countNeighboursForCells grid deadNeighboursOfLiveCells
 
         processAliveCells grid_ =
-            List.foldl
+            Set.foldl
                 (\( point, neighbourCount ) gridAcc ->
                     if neighbourCount == 2 || neighbourCount == 3 then
                         -- Keep cell alive
@@ -80,7 +71,7 @@ tick grid =
                 neighbourCountsForLiveCells
 
         processDeadCells grid_ =
-            List.foldl
+            Set.foldl
                 (\( point, neighbourCount ) gridAcc ->
                     if neighbourCount == 3 then
                         -- Make cell alive.
@@ -98,9 +89,9 @@ tick grid =
         |> processDeadCells
 
 
-countNeighboursForCells : Grid -> List Point -> List ( Point, Int )
+countNeighboursForCells : Grid -> Points -> Set ( Point, Int )
 countNeighboursForCells grid points =
-    List.map (\point -> ( point, countNeighboursForCell point grid )) points
+    Set.map (\point -> ( point, countNeighboursForCell point grid )) points
 
 
 neighbourPointDeltas =
@@ -133,41 +124,26 @@ countNeighboursForCell ( x, y ) grid =
         neighbourPointDeltas
 
 
-getLiveCells : Grid -> List Point
-getLiveCells grid =
-    IntDict.toList grid
-        |> List.foldl
-            (\( x, ys ) acc ->
-                Set.foldl (\y acc_ -> ( x, y ) :: acc_) acc ys
-            )
-            []
-
-
-getDeadNeighboursOfAliveCells : List Point -> List Point
+getDeadNeighboursOfAliveCells : Points -> Points
 getDeadNeighboursOfAliveCells alivePoints =
-    let
-        alivePointsSet =
-            Set.fromList alivePoints
-    in
-    Set.toList <|
-        -- Fold over alive points and check neighbours for each alive point.
-        List.foldl
-            (\( x, y ) deadPoints ->
-                -- Fold over neighbour, checking if a neighbour is alive or dead.
-                List.foldl
-                    (\( dx, dy ) deadPoints_ ->
-                        let
-                            neighbourPoint =
-                                ( x + dx, y + dy )
-                        in
-                        if Set.member neighbourPoint alivePointsSet then
-                            deadPoints_
+    -- Fold over alive points and check neighbours for each alive point.
+    Set.foldl
+        (\( x, y ) deadPoints ->
+            -- Fold over neighbour, checking if a neighbour is alive or dead.
+            List.foldl
+                (\( dx, dy ) deadPoints_ ->
+                    let
+                        neighbourPoint =
+                            ( x + dx, y + dy )
+                    in
+                    if Set.member neighbourPoint alivePoints then
+                        deadPoints_
 
-                        else
-                            Set.insert neighbourPoint deadPoints_
-                    )
-                    deadPoints
-                    neighbourPointDeltas
-            )
-            Set.empty
-            alivePoints
+                    else
+                        Set.insert neighbourPoint deadPoints_
+                )
+                deadPoints
+                neighbourPointDeltas
+        )
+        Set.empty
+        alivePoints
